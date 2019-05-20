@@ -1,0 +1,38 @@
+{
+    "schemaVersion": 1,
+    "id": "crankshaft",
+    "version": "%VERSION%",
+    "name": "Crankshaft",
+    "description": "We like to move it, move it!",
+    "authors": [
+        "T145"
+    ],
+    "contact": {
+        "homepage": "https://minecraft.curseforge.com/projects/crankshaft",
+        "sources": "https://github.com/T145/crankshaft",
+        "issues": "https://github.com/T145/crankshaft/issues"
+    },
+    "license": "Apache-2.0",
+    "icon": "assets/crankshaft/icon.png",
+    "environment": "*",
+    "entrypoints": {
+        "main": [
+            "T145.crankshaft.init.ModInit"
+        ],
+        "client": [
+            "T145.crankshaft.client.init.ClientModInit"
+        ],
+        "modmenu": [
+            "T145.crankshaft.client.init.ModMenuInit"
+        ]
+    },
+    "mixins": [
+        "crankshaft.mixins.json"
+    ],
+    "requires": {
+        "fabricloader": ">=0.4.0",
+        "fabric": ">=0.3.0",
+        "autoconfig1": ">=1.0.0",
+        "clothconfig": ">=0.2.0"
+    }
+}
