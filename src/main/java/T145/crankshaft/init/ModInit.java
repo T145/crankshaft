@@ -1,7 +1,7 @@
 package T145.crankshaft.init;
 
 import T145.crankshaft.api.constants.RegistryCS;
-import T145.crankshaft.blocks.ResizablePistonBlock;
+import T145.crankshaft.blocks.CustomPistonBlock;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.client.itemgroup.FabricItemGroupBuilder;
 import net.minecraft.block.Block;
@@ -16,7 +16,7 @@ public class ModInit implements ModInitializer {
 
 	public static ItemGroup GROUP;
 
-	public static final ResizablePistonBlock DOUBLE_PISTON = new ResizablePistonBlock(false, 2);
+	public static final CustomPistonBlock DOUBLE_PISTON = new CustomPistonBlock(false, 2);
 
 	private void registerBlock(Block block, String name) {
 		Identifier id = RegistryCS.getIdentifier(name);

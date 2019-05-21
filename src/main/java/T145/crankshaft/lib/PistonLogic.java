@@ -1,9 +1,8 @@
 package T145.crankshaft.lib;
 
 import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.List;
 
+import T145.crankshaft.api.ICustomPiston;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
@@ -17,29 +16,31 @@ public class PistonLogic {
 
 	private final World world;
 	private final BlockPos from;
-	private final BlockPos to;
 	private final Direction moving;
 	private final Direction front;
 	private final int length;
 	private final int movableBlocks;
-	private final List<BlockPos> affectedBlocks = new ArrayList<>();
+	private final ArrayDeque<BlockPos> affectedBlocks = new ArrayDeque<>();
 
 	// use dynamic programming to handle slime block cases
 	private final ArrayDeque<BlockPos> slimeBlocks = new ArrayDeque<>();
 
-	public PistonLogic(World world, BlockPos from, Direction front, int length, boolean extending, int movableBlocks) {
+	public PistonLogic(World world, BlockPos from, Direction front, int length, boolean extended, int movableBlocks) {
 		this.world = world;
 		this.from = from;
 		this.front = front;
-		this.length = length;
 		this.movableBlocks = movableBlocks;
 
-		if (extending) {
-			this.moving = front;
-			this.to = from.offset(moving, length);
+		if (length > movableBlocks) {
+			this.length = movableBlocks;
 		} else {
+			this.length = length;
+		}
+
+		if (extended) {
 			this.moving = front.getOpposite();
-			this.to = from.offset(moving, length + 2);
+		} else {
+			this.moving = front;
 		}
 	}
 
@@ -59,17 +60,32 @@ public class PistonLogic {
 		this(world, from, front, 1, false);
 	}
 
-	public List<BlockPos> getAffectedBlocks() {
+	public ArrayDeque<BlockPos> getAffectedBlocks() {
 		return affectedBlocks;
+	}
+
+	private static boolean hasDestroyMode(World world, BlockPos from) {
+		BlockState fromState = world.getBlockState(from);
+		Block fromBlock = fromState.getBlock();
+
+		if (fromBlock instanceof ICustomPiston) {
+			ICustomPiston piston = (ICustomPiston) fromBlock;
+
+			if (piston.inDestroyMode()) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	// using my own "isMovable" method so we can customize how the pistons behave
 	// it's also more clean
-	public static boolean canPistonPush(World world, BlockPos to, Direction moving, Direction front) {
+	public static boolean canPistonPush(World world, BlockPos from, BlockPos to, Direction moving, Direction front) {
 		BlockState destState = world.getBlockState(to);
 		Block destBlock = destState.getBlock();
 
-		if (destBlock == Blocks.OBSIDIAN
+		if (destState.getHardness(world, to) >= Blocks.OBSIDIAN.getHardness(destState, world, to)
 				|| !world.getWorldBorder().contains(to)
 				|| to.getY() < 0
 				|| moving == Direction.DOWN && to.getY() == 0) {
@@ -79,6 +95,10 @@ public class PistonLogic {
 			if (destBlock instanceof PistonBlock && destState.get(PistonBlock.EXTENDED)) {
 				return false;
 			} else {
+				if (hasDestroyMode(world, from)) {
+					return true;
+				}
+
 				if (destState.getHardness(world, to) == -1.0F) {
 					return false;
 				}
@@ -94,60 +114,72 @@ public class PistonLogic {
 					return !destBlock.hasBlockEntity();
 				}
 			}
-		} else {
-			return false;
 		}
-	}
 
-	private void affectBlockPos(BlockPos pos) {
-		this.affectedBlocks.add(pos);
-
-		if (world.getBlockState(pos).getBlock() instanceof SlimeBlock) {
-			this.slimeBlocks.add(pos);
-		}
+		return false;
 	}
 
 	public boolean canPistonExtend() {
 		this.affectedBlocks.clear();
+		this.slimeBlocks.clear();
 
-		short i = 0;
-		BlockPos pos = from.offset(front);
-		boolean canPushNeighbor = canPistonPush(world, pos, moving, front);
+		short i = 1;
+		BlockPos dest = from.offset(front);
 
-		if (canPushNeighbor) {
-			this.affectBlockPos(pos);
-
-			if (length > 1) {
-				for (i = 2; i < length && i < movableBlocks; ++i) {
-					pos = from.offset(front, i);
-
-					if (!canPistonPush(world, pos, moving, front)) {
-						return false;
-					}
-
-					this.affectBlockPos(pos);
-				}
+		if (hasDestroyMode(world, from)) {
+			for (; i < length && canPistonPush(world, from, dest, moving, front); ++i) {
+				this.affectedBlocks.add(dest = from.offset(front, i));
 			}
+			return true;
 		}
 
-		Direction.Type slimePlane = moving.getAxis().getType() == Direction.Type.HORIZONTAL ? Direction.Type.VERTICAL : Direction.Type.HORIZONTAL;
+		// if there's enough space between the range up to double the piston's length
+		// (including blocks w/ the piston behavior destroy)
+		// and it can push all of the blocks leading into this space,
+		// then the piston can extend
 
-		while (!slimeBlocks.isEmpty()) {
-			pos = slimeBlocks.poll();
+		// affectedBlocks.size() is always >= length and <= movableBlocks
 
-			for (Direction dir : slimePlane) {
-				BlockPos slimeNeighbor = pos.offset(dir);
+		// first we need to find out how big this gap is
+		// (and handle slime block cases)
+		for (i = 1, dest = from.offset(front); i < length; ++i) {
+			if (!canPistonPush(world, from, dest = from.offset(front, i), moving, front)) {
+				return false;
+			}
 
-				if (!canPistonPush(world, slimeNeighbor, moving, front)) {
+			BlockState destState = world.getBlockState(dest);
+
+			if (destState.getBlock() instanceof SlimeBlock) {
+				slimeBlocks.add(dest);
+				// compute into push count later
+			}
+
+			this.affectedBlocks.add(dest);
+		}
+
+		while (!this.slimeBlocks.isEmpty() && this.affectedBlocks.size() <= movableBlocks) {
+			dest = this.slimeBlocks.poll();
+
+			for (Direction dir : moving.getAxis().getType()) {
+				BlockPos offPos = dest.offset(dir);
+
+				if (!canPistonPush(world, from, offPos, moving, front)) {
 					return false;
 				}
 
-				if (world.getBlockState(slimeNeighbor).getBlock() instanceof SlimeBlock) {
-					slimeBlocks.add(slimeNeighbor);
+				BlockState offState = world.getBlockState(offPos);
+
+				if (offState.getBlock() instanceof SlimeBlock) {
+					slimeBlocks.addFirst(dest);
 				}
 			}
 		}
 
 		return true;
+	}
+
+	// should be called after `canPistonExtend()`
+	public void pushBlocks() {
+
 	}
 }
