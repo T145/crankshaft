@@ -1,0 +1,8 @@
+{
+	"parent": "block/template_piston",
+	"textures": {
+		"bottom": "crankshaft:blocks/double_piston",
+		"side": "crankshaft:blocks/double_piston_side",
+		"platform": "block/piston_top"
+	}
+}
